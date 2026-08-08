@@ -1,0 +1,78 @@
+services:
+  postgres: #DB
+    # Use the official PostgreSQL image
+    image: postgres:16
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meridian -d meridian"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+    # Database configuration
+    environment:
+      POSTGRES_DB: meridian
+      POSTGRES_USER: meridian
+      POSTGRES_PASSWORD: meridian
+
+    # Persist PostgreSQL data outside the container
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    # Expose PostgreSQL to the host machine
+    ports:
+      - "5432:5432"
+
+  app: 
+    # Build the application image from the Dockerfile
+    build: .
+    # Start the application after PostgreSQL is started
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    # Provide the database connection string to the application
+    environment:
+      DATABASE_URL: postgresql+psycopg://meridian:meridian@postgres:5432/meridian
+
+volumes:
+  # Named volume used to persist database data
+  postgres_data:
+
+
+
+
+
+
+
+# services:
+#   ingest:
+#     build: .                 # build the Dockerfile in this directory
+#     depends_on:
+#       db:
+#         condition: service_healthy
+#     environment:
+#       DATABASE_URL: postgresql://meridian:meridian@db:5432/meridian_trips
+#     volumes:
+#       - ./drops:/data/drops
+#       - ./rejects:/data/rejects
+
+
+#   db:
+#     image: postgres:16
+#     healthcheck:
+#       test: ["CMD-SHELL", "pg_isready -U meridian -d meridian_trips"]
+#       interval: 5s
+#       timeout: 5s
+#       retries: 5
+#     environment:
+#       POSTGRES_USER: meridian
+#       POSTGRES_PASSWORD: meridian
+#       POSTGRES_DB: meridian_trips
+#     ports:
+#       - "55432:5432"
+#     volumes:
+#       - meridian_pgdata:/var/lib/postgresql/data
+
+# volumes:
+#   meridian_pgdata:

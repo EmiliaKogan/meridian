@@ -5,6 +5,7 @@ __pycache__/
 .coverage
 htmlcov/
 
+# Local environment variables
 .env
 .env.*
 !.env.example
