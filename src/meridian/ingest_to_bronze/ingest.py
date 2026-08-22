@@ -15,24 +15,46 @@ def find_source_zip(market: str, data_window: str) -> str:
     if market == "NYC":
         prefixes = [
             f"{year}{month}-citibike-tripdata",
-            f"{year}-citibike-tripdata",]
+            f"{year}-citibike-tripdata",
+        ]
     elif market == "JC":
-        prefixes = [f"JC-{year}{month}-citibike-tripdata",]
+        prefixes = [
+            f"JC-{year}{month}-citibike-tripdata",
+        ]
     else:
         raise ValueError(f"Unknown market: {market}")
 
     for prefix in prefixes:
-        response = httpx.get(S3_URL, params={"list-type": "2","prefix": prefix,},)
+        response = httpx.get(S3_URL, params={
+                "list-type": "2",
+                "prefix": prefix,
+            },
+        )
         response.raise_for_status()
 
-        keys = [part.split("</Key>", 1)[0] for part in response.text.split("<Key>")[1:]]
+        contents = response.text.split("<Contents>")[1:]
 
-        if keys:
-            if len(keys) > 1:
-                raise ValueError(f"Multiple source files found for "f"{market} {data_window}: {keys}")
-            return keys[0]
+        if not contents:
+            continue
 
-    raise ValueError(f"No source ZIP found for {market} {data_window}")
+        files = []
+
+        for content in contents:
+            key = content.split("<Key>", 1)[1].split("</Key>", 1)[0]
+            last_modified = (
+                content.split("<LastModified>", 1)[1]
+                .split("</LastModified>", 1)[0]
+            )
+
+            files.append((key, last_modified))
+
+        latest_key, _ = max(files, key=lambda item: item[1])
+
+        return latest_key
+
+    raise ValueError(
+        f"No source ZIP found for {market} {data_window}"
+    )
 
 
 def download_source_zip(source_zip: str) -> Path:

@@ -27,7 +27,7 @@ services:
         condition: service_healthy
 
     environment: # Provide the database connection string to the application
-      DATABASE_URL: postgresql+psycopg://meridian:meridian@postgres:5432/meridian
+      DATABASE_URL: postgresql://meridian:meridian@postgres:5432/meridian
 
     volumes:
       - bronze_data:/data/bronze
