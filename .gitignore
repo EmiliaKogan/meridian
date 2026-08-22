@@ -11,3 +11,5 @@ htmlcov/
 !.env.example
 
 *.log
+
+tmp/
