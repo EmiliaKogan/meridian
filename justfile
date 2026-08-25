@@ -23,11 +23,11 @@ transform-to-gold dataset date:
     docker compose run --rm app uv run python -m meridian.transform_to_gold.main {{dataset}} {{date}}
 
 # Inspect Bronze or Silver data for a specific dataset and data window.
-inspect layer dataset_market window:
-    docker compose run --rm app uv run python -m meridian.inspect.main {{layer}} {{dataset_market}} {{window}}
+inspect layer job window:
+    docker compose run --rm app uv run python -m meridian.inspect.main {{layer}} {{job}} {{window}}
 
 # Report daily station departures and arrivals.
-report report_type market station_id date:
-    docker compose run --rm app uv run python -m meridian.report.main {{report_type}} {{market}} {{station_id}} {{date}}
+report report_type market station day:
+    docker compose run --rm app uv run python -m meridian.report.main {{report_type}} {{market}} {{station}} {{day}}
 
 
