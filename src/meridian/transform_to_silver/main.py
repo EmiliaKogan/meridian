@@ -32,9 +32,9 @@ def main() -> None:
 
     csv_files = sorted(bronze_dir.glob("*.csv"))
 
-    print("Silver transformation started")
-    print(f"Market: {market}")
-    print(f"Window: {data_window}")
+    # print("Silver transformation started")
+    # print(f"Market: {market}")
+    # print(f"Window: {data_window}")
 
     database_url = os.environ["DATABASE_URL"]
 
@@ -60,10 +60,10 @@ def main() -> None:
 
         conn.commit()
 
-    print(f"Total inserted rows: {total_rows}")
-    print(f"Total rejected rows: {total_rejects}")
+    # print(f"Total inserted rows: {total_rows}")
+    # print(f"Total rejected rows: {total_rejects}")
 
-    print("Silver transformation completed")
+    # print("Silver transformation completed")
 
 
 if __name__ == "__main__":

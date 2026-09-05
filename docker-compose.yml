@@ -26,7 +26,7 @@ services:
       postgres:
         condition: service_healthy
 
-    environment: # Provide the database connection string to the application
+    environment: # Provide the database connection string to the application (DSN)
       DATABASE_URL: postgresql://meridian:meridian@postgres:5432/meridian
 
     volumes:

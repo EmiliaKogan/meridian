@@ -10,24 +10,45 @@ down:
 run *args:
     just {{args}}
 
-# Run the Bronze ingestion job for a specific market and data window.
-ingest-to-bronze dataset_market window:
-    docker compose run --rm app uv run python -m meridian.ingest_to_bronze.main {{dataset_market}} {{window}}
+# Run the Bronze ingestion job.
+ingest-to-bronze job window:
+    docker compose run --rm app uv run python -m meridian.ingest_to_bronze.main {{job}} {{window}}
 
-# Transform Bronze data into Silver for a specific dataset and data window.
-transform-to-silver dataset_market window:
-    docker compose run --rm app uv run python -m meridian.transform_to_silver.main {{dataset_market}} {{window}}
+# Transform Bronze data into Silver.
+transform-to-silver job window:
+    docker compose run --rm app uv run python -m meridian.transform_to_silver.main {{job}} {{window}}
 
-# Transform Silver data into Gold for a specific dataset and date.
-transform-to-gold dataset date:
-    docker compose run --rm app uv run python -m meridian.transform_to_gold.main {{dataset}} {{date}}
+# Transform Silver data into Gold.
+transform-to-gold job window:
+    docker compose run --rm app uv run python -m meridian.transform_to_gold.main {{job}} {{window}}
 
-# Inspect Bronze or Silver data for a specific dataset and data window.
+# Inspect Bronze or Silver data.
 inspect layer job window:
     docker compose run --rm app uv run python -m meridian.inspect.main {{layer}} {{job}} {{window}}
 
 # Report daily station departures and arrivals.
 report report_type market station day:
     docker compose run --rm app uv run python -m meridian.report.main {{report_type}} {{market}} {{station}} {{day}}
+
+
+# # Run the Bronze ingestion job for a specific market and data window.
+# ingest-to-bronze dataset_market window:
+#     docker compose run --rm app uv run python -m meridian.ingest_to_bronze.main {{dataset_market}} {{window}}
+
+# # Transform Bronze data into Silver for a specific dataset and data window.
+# transform-to-silver dataset_market window:
+#     docker compose run --rm app uv run python -m meridian.transform_to_silver.main {{dataset_market}} {{window}}
+
+# # Transform Silver data into Gold for a specific dataset and date.
+# transform-to-gold dataset date:
+#     docker compose run --rm app uv run python -m meridian.transform_to_gold.main {{dataset}} {{date}}
+
+# # Inspect Bronze or Silver data for a specific dataset and data window.
+# inspect layer job window:
+#     docker compose run --rm app uv run python -m meridian.inspect.main {{layer}} {{job}} {{window}}
+
+# # Report daily station departures and arrivals.
+# report report_type market station day:
+#     docker compose run --rm app uv run python -m meridian.report.main {{report_type}} {{market}} {{station}} {{day}}
 
 

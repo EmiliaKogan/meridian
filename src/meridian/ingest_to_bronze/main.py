@@ -28,12 +28,12 @@ def main() -> None:
     dataset, market = parse_dataset_market(sys.argv[1])
     data_window = sys.argv[2]
 
-    print(f"Bronze ingestion started")
-    print(f"Market: {market}")
-    print(f"Window: {data_window}")
+    # print(f"Bronze ingestion started")
+    # print(f"Market: {market}")
+    # print(f"Window: {data_window}")
 
     source_zip = find_source_zip(market, data_window)
-    print(f"Source ZIP: {source_zip}")
+    # print(f"Source ZIP: {source_zip}")
 
     zip_path = download_source_zip(source_zip)
 
@@ -44,7 +44,7 @@ def main() -> None:
         #     print(f"Latest CSV: {csv_path}")
 
         save_bronze_csvs(zip_path, csv_paths, market, data_window,)
-        print("Bronze ingestion completed")
+        # print("Bronze ingestion completed")
 
     finally:
         zip_path.unlink(missing_ok=True)

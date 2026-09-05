@@ -38,9 +38,9 @@ def main() -> None:
 
         conn.commit()
 
-    print("Gold transformation completed")
-    print(f"Date: {target_date}")
-    print(f"Inserted events: {inserted_events}")
+    # print("Gold transformation completed")
+    # print(f"Date: {target_date}")
+    # print(f"Inserted events: {inserted_events}")
 
 
 if __name__ == "__main__":
