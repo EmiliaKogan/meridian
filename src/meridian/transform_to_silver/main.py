@@ -52,11 +52,11 @@ def main() -> None:
             total_rows += inserted_rows
             total_rejects += inserted_rejects
 
-            print(
-                f"{csv_file.name}: "
-                f"{inserted_rows} valid rows, "
-                f"{inserted_rejects} rejected rows"
-            )
+            # print(
+            #     f"{csv_file.name}: "
+            #     f"{inserted_rows} valid rows, "
+            #     f"{inserted_rejects} rejected rows"
+            # )
 
         conn.commit()
 
