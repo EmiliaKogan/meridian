@@ -5,7 +5,8 @@ def record_load(conn, job: str, market: str, window: str) -> None:
             """
             INSERT INTO operational_loads (job, market, load_window)
             VALUES (%s, %s, %s)
-            ON CONFLICT (job, market, load_window) DO NOTHING
-            """,
+            ON CONFLICT (job, market, load_window)
+            DO UPDATE SET loaded_at = CURRENT_TIMESTAMP
+            """, ##ON CONFLICT (job, market, load_window) DO NOTHING
             (job, market, window),
         )

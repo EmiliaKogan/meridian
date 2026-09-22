@@ -28,10 +28,16 @@ def migrated(pg_url: str) -> str:
 
 
 @pytest.fixture
-def database_connection(migrated: str):
+def conn(migrated: str):
     """Provide a connection to the migrated test database."""
     with psycopg.connect(migrated) as conn:
         yield conn
+
+
+@pytest.fixture(autouse=True)
+def clean_operational_loads(conn):
+    conn.execute("DELETE FROM operational_loads")
+    conn.commit()
 
 
 @pytest.fixture
