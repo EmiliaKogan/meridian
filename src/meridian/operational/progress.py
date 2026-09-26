@@ -51,6 +51,7 @@ def _gold_days_complete(conn, market: str, month: str, silver_loaded_at,) -> boo
 
 
 def _month_is_complete(conn, job: str, market: str, month: str) -> bool:
+    """Return whether Silver and all Gold days are loaded for a month."""
     silver_loaded_at = _silver_loaded_at(conn, job, market, month)
 
     if silver_loaded_at is None:
