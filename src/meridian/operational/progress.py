@@ -53,6 +53,16 @@ def _month_is_complete(conn, job: str, market: str, month: str) -> bool:
     return gold_count == days
 
 
+
+def _completed_months(conn, job: str, market: str, months: list[str],) -> list[str]:
+    """Return published months that are fully loaded."""
+    return [
+        month
+        for month in months
+        if _month_is_complete(conn, job, market, month)
+    ]
+
+
 def _next_month(month: str) -> str:
     """Return the month after the given month."""
     year, month_number = map(int, month.split("-"))
@@ -79,24 +89,15 @@ def _published_months(conn, job: str, market: str) -> list[str]:
         return [row[0] for row in cur.fetchall()]
 
 
-def _complete_months(conn, job: str, market: str, months: list[str],) -> list[str]:
-    """Return published months that are fully loaded."""
-    return [
-        month
-        for month in months
-        if _month_is_complete(conn, job, market, month)
-    ]
-
-
 def progress(conn, job: str) -> dict:
     """Return operational load progress for a job."""
     earliest = EARLIEST[job]
     market = job.split(":")[1]
 
     published = _published_months(conn, job, market)
-    complete_months = _complete_months(conn, job, market, published)
+    completed_months = _completed_months(conn, job, market, published)
 
-    complete_set = set(complete_months)
+    complete_set = set(completed_months)
     month = earliest
     watermark = None
 
@@ -104,7 +105,7 @@ def progress(conn, job: str) -> dict:
         watermark = month
         month = _next_month(month)
 
-    complete = len(complete_months)
+    complete = len(completed_months)
 
     newest = published[-1] if published else None
     gaps = []

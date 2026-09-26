@@ -44,12 +44,7 @@ def test_progress_when_month_has_silver_and_all_gold_days(conn):
     day = date(2021, 1, 1)
 
     for _ in range(31):
-        record_load(
-            conn,
-            "station-daily",
-            GOOD["market"],
-            day.isoformat(),
-        )
+        record_load(conn, "station-daily", GOOD["market"], day.isoformat(),)
         day += timedelta(days=1)
 
     conn.commit()
@@ -72,12 +67,7 @@ def test_progress_when_one_gold_day_is_missing(conn):
     day = date(2021, 1, 1)
 
     for _ in range(30):
-        record_load(
-            conn,
-            "station-daily",
-            GOOD["market"],
-            day.isoformat(),
-        )
+        record_load(conn, "station-daily", GOOD["market"], day.isoformat(), )
         day += timedelta(days=1)
 
     conn.commit()
@@ -101,12 +91,7 @@ def test_progress_when_two_consecutive_months_are_complete(conn):
         day = date.fromisoformat(f"{month}-01")
 
         for _ in range(days):
-            record_load(
-                conn,
-                "station-daily",
-                GOOD["market"],
-                day.isoformat(),
-            )
+            record_load(conn, "station-daily", GOOD["market"], day.isoformat(), )
             day += timedelta(days=1)
 
     conn.commit()
@@ -130,12 +115,7 @@ def test_progress_when_there_is_a_gap_between_complete_months(conn,):
         day = date.fromisoformat(f"{month}-01")
 
         for _ in range(days):
-            record_load(
-                conn,
-                "station-daily",
-                GOOD["market"],
-                day.isoformat(),
-            )
+            record_load(conn, "station-daily", GOOD["market"], day.isoformat(), )
             day += timedelta(days=1)
 
     conn.commit()
@@ -158,12 +138,7 @@ def test_progress_when_later_month_is_complete_but_earliest_is_not(conn,):
     day = date(2021, 2, 1)
 
     for _ in range(28):
-        record_load(
-            conn,
-            "station-daily",
-            GOOD["market"],
-            day.isoformat(),
-        )
+        record_load(conn, "station-daily", GOOD["market"], day.isoformat(), )
         day += timedelta(days=1)
 
     conn.commit()
@@ -196,12 +171,7 @@ def test_progress_does_not_count_gold_loaded_before_silver(conn):
     day = date(2021, 1, 2)
 
     for _ in range(30):
-        record_load(
-            conn,
-            "station-daily",
-            GOOD["market"],
-            day.isoformat(),
-        )
+        record_load(conn, "station-daily", GOOD["market"], day.isoformat(),)
         day += timedelta(days=1)
 
     conn.commit()
