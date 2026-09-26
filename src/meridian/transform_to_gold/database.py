@@ -41,11 +41,7 @@ def insert_stations(conn: psycopg.Connection,target_date: str,) -> None:
     with conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO dim_station (
-                market,
-                station_id,
-                station_name
-            )
+            INSERT INTO dim_station (market, station_id, station_name)
             SELECT DISTINCT
                 market,
                 station_id,
