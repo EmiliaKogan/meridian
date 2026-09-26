@@ -17,6 +17,9 @@ Airflow owns execution state such as:
 
 Stage 1 jobs never write to `operational_loads`.
 
+Control Table is not a record of all executions.
+Hand runs are never recorded.
+
 ### Progress
 
 Operational progress is calculated from `operational_loads`

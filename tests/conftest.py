@@ -41,6 +41,35 @@ def clean_operational_loads(conn):
 
 
 @pytest.fixture
+def pipeline_stage_spies(monkeypatch):
+    calls = []
+
+    def fake_bronze(job, month):
+        calls.append(("bronze", job, month))
+
+    def fake_silver(job, month):
+        calls.append(("silver", job, month))
+
+    def fake_gold(conn, month):
+        calls.append(("gold", month))
+
+    monkeypatch.setattr(
+        "meridian.operational.pipeline._run_bronze",
+        fake_bronze,
+    )
+    monkeypatch.setattr(
+        "meridian.operational.pipeline._run_silver",
+        fake_silver,
+    )
+    monkeypatch.setattr(
+        "meridian.operational.pipeline._run_gold",
+        fake_gold,
+    )
+
+    return calls
+
+
+@pytest.fixture
 def stack_is_running():
     subprocess.run(["just", "up"], check=True)
 
