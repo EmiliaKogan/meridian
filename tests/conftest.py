@@ -1,6 +1,72 @@
+import os
 import subprocess
+from collections.abc import Iterator
 
+import psycopg
 import pytest
+from alembic import command
+from alembic.config import Config
+from testcontainers.community.postgres import PostgresContainer
+
+
+@pytest.fixture(scope="session")
+def pg_url() -> Iterator[str]:
+    """Start a temporary PostgreSQL container and yield its connection URL."""
+    with PostgresContainer("postgres:16-alpine", driver=None) as postgres:
+        yield postgres.get_connection_url()
+
+
+@pytest.fixture(scope="session")
+def migrated(pg_url: str) -> str:
+    """Apply all Alembic migrations to the test database."""
+    os.environ["DATABASE_URL"] = pg_url
+
+    config = Config("alembic.ini")
+    command.upgrade(config, "head")
+
+    return pg_url
+
+
+@pytest.fixture
+def conn(migrated: str):
+    """Provide a connection to the migrated test database."""
+    with psycopg.connect(migrated) as conn:
+        yield conn
+
+
+@pytest.fixture(autouse=True)
+def clean_control_table(conn):
+    conn.execute("DELETE FROM control_table")
+    conn.commit()
+
+
+@pytest.fixture
+def pipeline_stage_spies(monkeypatch):
+    calls = []
+
+    def fake_bronze(job, month):
+        calls.append(("bronze", job, month))
+
+    def fake_silver(job, month):
+        calls.append(("silver", job, month))
+
+    def fake_gold(conn, month):
+        calls.append(("gold", month))
+
+    monkeypatch.setattr(
+        "meridian.operational.pipeline._run_bronze",
+        fake_bronze,
+    )
+    monkeypatch.setattr(
+        "meridian.operational.pipeline._run_silver",
+        fake_silver,
+    )
+    monkeypatch.setattr(
+        "meridian.operational.pipeline._run_gold",
+        fake_gold,
+    )
+
+    return calls
 
 
 @pytest.fixture

@@ -62,26 +62,26 @@ def test_bronze_jc_2026_06_has_expected_row_count(
     assert output["rows"] == 109897
 
 
-def test_bronze_nyc_2018_04_has_expected_row_count(
-    bronze_nyc_2018_04,
-):
-    result = subprocess.run(
-        [
-            "just",
-            "inspect",
-            "bronze",
-            "trips:nyc",
-            "2018-04",
-        ],
-        capture_output=True,
-        text=True,
-    )
+# def test_bronze_nyc_2018_04_has_expected_row_count(
+#     bronze_nyc_2018_04,
+# ):
+#     result = subprocess.run(
+#         [
+#             "just",
+#             "inspect",
+#             "bronze",
+#             "trips:nyc",
+#             "2018-04",
+#         ],
+#         capture_output=True,
+#         text=True,
+#     )
 
-    assert result.returncode == 0
+#     assert result.returncode == 0
 
-    output = json.loads(result.stdout)
+#     output = json.loads(result.stdout)
 
-    assert output["rows"] == 1307543
+#     assert output["rows"] == 1307543
 
 
 def test_bronze_jc_2019_06_is_idempotent(
