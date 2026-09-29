@@ -50,8 +50,8 @@ def pipeline_stage_spies(monkeypatch):
     def fake_silver(job, month):
         calls.append(("silver", job, month))
 
-    def fake_gold(conn, month):
-        calls.append(("gold", month))
+    def fake_gold(job, month):
+        calls.append(("gold", job, month))
 
     monkeypatch.setattr(
         "meridian.operational.pipeline._run_bronze",
