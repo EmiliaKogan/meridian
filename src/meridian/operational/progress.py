@@ -28,9 +28,13 @@ def _days_in_month(month: str) -> int:
     return monthrange(year, month_number)[1]
 
 
-def _gold_days_complete(conn, market: str, month: str, silver_finished_at,) -> bool:
-    days = _days_in_month(month)
-    
+def _gold_day_count(
+    conn,
+    market: str,
+    month: str,
+    days: int,
+    silver_finished_at,
+) -> int:
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -38,7 +42,8 @@ def _gold_days_complete(conn, market: str, month: str, silver_finished_at,) -> b
             FROM control_table
             WHERE job = 'station-daily'
               AND market = %s
-              AND load_window >= %s AND load_window <= %s
+              AND load_window >= %s
+              AND load_window <= %s
               AND status = 'SUCCESS'
               AND finished_at >= %s
             """,
@@ -49,7 +54,24 @@ def _gold_days_complete(conn, market: str, month: str, silver_finished_at,) -> b
                 silver_finished_at,
             ),
         )
-        gold_count = cur.fetchone()[0]
+        return cur.fetchone()[0]
+
+
+def _gold_days_complete(
+    conn,
+    market: str,
+    month: str,
+    silver_finished_at,
+) -> bool:
+    days = _days_in_month(month)
+
+    gold_count = _gold_day_count(
+        conn,
+        market,
+        month,
+        days,
+        silver_finished_at,
+    )
 
     return gold_count == days
 

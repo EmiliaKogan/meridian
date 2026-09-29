@@ -3,11 +3,7 @@ import pytest
 from meridian.operational.pipeline import run_pipeline
 
 
-GOOD = {
-    "market": "jc",
-    "job": "trips:jc",
-    "month": "2021-01",
-}
+GOOD = {"job": "trips:jc", "market": "jc", "month": "2021-02",}
 
 
 def test_pipeline_runs_all_stages_in_order(

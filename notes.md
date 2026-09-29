@@ -64,3 +64,12 @@ The operational pipeline supports three forms:
 just run pipeline <market>
 just run pipeline <market> <month>
 just run pipeline <market> <month> <month>
+
+## Gold Batch
+
+- Each Gold day attempt is recorded immediately in the Control Table as `SUCCESS` or `FAILED`.
+- The database transaction is committed after each Gold day so completed days are preserved if a later day fails.
+- A failure on one day does not stop the remaining days from running.
+- After all days are attempted, the batch fails if any days failed and reports the failed dates.
+- On retry, Gold runs only days without a successful attempt after the latest successful Silver load.
+- Gold successes from before the latest successful Silver load are considered stale and must be rebuilt
