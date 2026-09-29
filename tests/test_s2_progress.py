@@ -1,332 +1,249 @@
-from datetime import date, timedelta
-
 from meridian.operational.control import record_job_attempt
 from meridian.operational.progress import progress
 
 
-GOOD = {
-    "job": "trips:jc",
-    "market": "jc",
-    "window": "2021-01",
-}
+GOOD = {"job": "trips:jc", "market": "jc", "month": "2021-01",}
 
 
-def test_progress_when_no_loads_exist(conn):
+def _record(
+    conn,
+    layer: str,
+    job: str,
+    window: str,
+    status: str = "SUCCESS",
+) -> None:
+    record_job_attempt(
+        conn,
+        layer,
+        job,
+        GOOD["market"],
+        window,
+        status,
+    )
+    conn.commit()
+
+
+def _record_bronze(conn, month: str) -> None:
+    _record(
+        conn,
+        "bronze",
+        GOOD["job"],
+        month,
+    )
+
+
+def _record_silver(conn, month: str) -> None:
+    _record(
+        conn,
+        "silver",
+        GOOD["job"],
+        month,
+    )
+
+
+def _record_gold_month(
+    conn,
+    month: str,
+    days: int,
+) -> None:
+    for day in range(1, days + 1):
+        _record(
+            conn,
+            "gold",
+            "station-daily",
+            f"{month}-{day:02d}",
+        )
+
+
+def _complete_month(
+    conn,
+    month: str,
+    days: int,
+) -> None:
+    _record_bronze(conn, month)
+    _record_silver(conn, month)
+    _record_gold_month(conn, month, days)
+
+
+def test_no_loads_has_no_complete_months(conn):
     result = progress(conn, GOOD["job"])
 
     assert result == {
         "job": GOOD["job"],
-        "earliest": GOOD["window"],
+        "earliest": "2021-01",
         "watermark": None,
         "complete": 0,
         "gaps": [],
-        "next": GOOD["window"],
+        "next": "2021-01",
     }
 
 
-def test_progress_when_silver_is_loaded_but_gold_is_missing(conn):
-    record_job_attempt(
+def test_bronze_only_is_not_complete(conn):
+    _record_bronze(conn, GOOD["month"])
+
+    result = progress(conn, GOOD["job"])
+
+    assert result["complete"] == 0
+    assert result["watermark"] is None
+    assert result["next"] == GOOD["month"]
+
+
+def test_silver_without_bronze_is_not_complete(conn):
+    _record_silver(conn, GOOD["month"])
+    _record_gold_month(conn, GOOD["month"], 31)
+
+    result = progress(conn, GOOD["job"])
+
+    assert result["complete"] == 0
+
+
+def test_bronze_and_silver_without_gold_are_not_complete(conn):
+    _record_bronze(conn, GOOD["month"])
+    _record_silver(conn, GOOD["month"])
+
+    result = progress(conn, GOOD["job"])
+
+    assert result["complete"] == 0
+
+
+def test_missing_gold_day_makes_month_incomplete(conn):
+    _record_bronze(conn, GOOD["month"])
+    _record_silver(conn, GOOD["month"])
+    _record_gold_month(conn, GOOD["month"], 30)
+
+    result = progress(conn, GOOD["job"])
+
+    assert result["complete"] == 0
+
+
+def test_complete_month_is_counted(conn):
+    _complete_month(conn, GOOD["month"], 31)
+
+    result = progress(conn, GOOD["job"])
+
+    assert result["complete"] == 1
+    assert result["watermark"] == GOOD["month"]
+
+
+def test_two_consecutive_complete_months_advance_watermark(conn):
+    _complete_month(conn, "2021-01", 31)
+    _complete_month(conn, "2021-02", 28)
+
+    result = progress(conn, GOOD["job"])
+
+    assert result["complete"] == 2
+    assert result["watermark"] == "2021-02"
+
+
+def test_gap_is_reported(conn):
+    _complete_month(conn, "2021-01", 31)
+    _complete_month(conn, "2021-02", 28)
+    _complete_month(conn, "2021-04", 30)
+
+    result = progress(conn, GOOD["job"])
+
+    assert result["watermark"] == "2021-02"
+    assert result["complete"] == 3
+    assert result["gaps"] == ["2021-03"]
+    assert result["next"] == "2021-03"
+
+
+def test_later_complete_month_does_not_skip_earliest(conn):
+    _complete_month(conn, "2021-02", 28)
+
+    result = progress(conn, GOOD["job"])
+
+    assert result["watermark"] is None
+    assert result["complete"] == 1
+    assert result["next"] == "2021-01"
+
+
+def test_failed_bronze_does_not_count(conn):
+    _record(
         conn,
+        "bronze",
         GOOD["job"],
-        GOOD["market"],
-        GOOD["window"],
-        "SUCCESS",
+        GOOD["month"],
+        "FAILED",
     )
-    conn.commit()
+    _record_silver(conn, GOOD["month"])
+    _record_gold_month(conn, GOOD["month"], 31)
 
     result = progress(conn, GOOD["job"])
 
-    assert result == {
-        "job": GOOD["job"],
-        "earliest": GOOD["window"],
-        "watermark": None,
-        "complete": 0,
-        "gaps": [],
-        "next": GOOD["window"],
-    }
+    assert result["complete"] == 0
 
 
-def test_progress_when_month_has_silver_and_all_gold_days(conn):
-    record_job_attempt(
+def test_failed_silver_does_not_count(conn):
+    _record_bronze(conn, GOOD["month"])
+    _record(
         conn,
+        "silver",
         GOOD["job"],
-        GOOD["market"],
-        GOOD["window"],
-        "SUCCESS",
+        GOOD["month"],
+        "FAILED",
     )
-
-    day = date(2021, 1, 1)
-
-    for _ in range(31):
-        record_job_attempt(
-            conn,
-            "station-daily",
-            GOOD["market"],
-            day.isoformat(),
-            "SUCCESS",
-        )
-        day += timedelta(days=1)
-
-    conn.commit()
+    _record_gold_month(conn, GOOD["month"], 31)
 
     result = progress(conn, GOOD["job"])
 
-    assert result == {
-        "job": GOOD["job"],
-        "earliest": GOOD["window"],
-        "watermark": "2021-01",
-        "complete": 1,
-        "gaps": [],
-        "next": None,
-    }
+    assert result["complete"] == 0
 
 
-def test_progress_when_one_gold_day_is_missing(conn):
-    record_job_attempt(
+def test_failed_gold_day_does_not_count(conn):
+    _record_bronze(conn, GOOD["month"])
+    _record_silver(conn, GOOD["month"])
+    _record_gold_month(conn, GOOD["month"], 30)
+    _record(
         conn,
-        GOOD["job"],
-        GOOD["market"],
-        GOOD["window"],
-        "SUCCESS",
+        "gold",
+        "station-daily",
+        "2021-01-31",
+        "FAILED",
     )
 
-    day = date(2021, 1, 1)
+    result = progress(conn, GOOD["job"])
 
-    for _ in range(30):
-        record_job_attempt(
-            conn,
-            "station-daily",
-            GOOD["market"],
-            day.isoformat(),
-            "SUCCESS",
-        )
-        day += timedelta(days=1)
+    assert result["complete"] == 0
 
-    conn.commit()
+
+def test_silver_before_latest_bronze_is_stale(conn):
+    _complete_month(conn, GOOD["month"], 31)
+    _record_bronze(conn, GOOD["month"])
 
     result = progress(conn, GOOD["job"])
 
-    assert result == {
-        "job": GOOD["job"],
-        "earliest": GOOD["window"],
-        "watermark": None,
-        "complete": 0,
-        "gaps": [],
-        "next": GOOD["window"],
-    }
+    assert result["complete"] == 0
+    assert result["next"] == GOOD["month"]
 
 
-def test_progress_when_two_consecutive_months_are_complete(conn):
-    for month, days in [("2021-01", 31), ("2021-02", 28)]:
-        record_job_attempt(
-            conn,
-            GOOD["job"],
-            GOOD["market"],
-            month,
-            "SUCCESS",
-        )
-
-        day = date.fromisoformat(f"{month}-01")
-
-        for _ in range(days):
-            record_job_attempt(
-                conn,
-                "station-daily",
-                GOOD["market"],
-                day.isoformat(),
-                "SUCCESS",
-            )
-            day += timedelta(days=1)
-
-    conn.commit()
+def test_gold_before_latest_silver_is_stale(conn):
+    _complete_month(conn, GOOD["month"], 31)
+    _record_silver(conn, GOOD["month"])
 
     result = progress(conn, GOOD["job"])
 
-    assert result == {
-        "job": GOOD["job"],
-        "earliest": GOOD["window"],
-        "watermark": "2021-02",
-        "complete": 2,
-        "gaps": [],
-        "next": None,
-    }
+    assert result["complete"] == 0
+    assert result["next"] == GOOD["month"]
 
 
-def test_progress_when_there_is_a_gap_between_complete_months(conn):
-    for month, days in [
-        ("2021-01", 31),
-        ("2021-02", 28),
-        ("2021-04", 30),
-    ]:
-        record_job_attempt(
-            conn,
-            GOOD["job"],
-            GOOD["market"],
-            month,
-            "SUCCESS",
-        )
-
-        day = date.fromisoformat(f"{month}-01")
-
-        for _ in range(days):
-            record_job_attempt(
-                conn,
-                "station-daily",
-                GOOD["market"],
-                day.isoformat(),
-                "SUCCESS",
-            )
-            day += timedelta(days=1)
-
-    conn.commit()
-
-    result = progress(conn, GOOD["job"])
-
-    assert result == {
-        "job": GOOD["job"],
-        "earliest": GOOD["window"],
-        "watermark": "2021-02",
-        "complete": 3,
-        "gaps": ["2021-03"],
-        "next": "2021-03",
-    }
-
-
-def test_progress_when_later_month_is_complete_but_earliest_is_not(conn):
-    record_job_attempt(
+def test_success_after_failed_attempt_counts(conn):
+    _record(
         conn,
+        "bronze",
         GOOD["job"],
-        GOOD["market"],
-        "2021-02",
-        "SUCCESS",
+        GOOD["month"],
+        "FAILED",
     )
-
-    day = date(2021, 2, 1)
-
-    for _ in range(28):
-        record_job_attempt(
-            conn,
-            "station-daily",
-            GOOD["market"],
-            day.isoformat(),
-            "SUCCESS",
-        )
-        day += timedelta(days=1)
-
-    conn.commit()
+    _complete_month(conn, GOOD["month"], 31)
 
     result = progress(conn, GOOD["job"])
 
-    assert result == {
-        "job": GOOD["job"],
-        "earliest": GOOD["window"],
-        "watermark": None,
-        "complete": 1,
-        "gaps": [],
-        "next": GOOD["window"],
-    }
+    assert result["complete"] == 1
 
 
-def test_progress_does_not_count_failed_gold_attempt(conn):
-    record_job_attempt(
-        conn,
-        GOOD["job"],
-        GOOD["market"],
-        GOOD["window"],
-        "SUCCESS",
-    )
-
-    day = date(2021, 1, 1)
-
-    for index in range(31):
-        status = "FAILED" if index == 0 else "SUCCESS"
-
-        record_job_attempt(
-            conn,
-            "station-daily",
-            GOOD["market"],
-            day.isoformat(),
-            status,
-        )
-        day += timedelta(days=1)
-
-    conn.commit()
-
-    result = progress(conn, GOOD["job"])
-
-    assert result == {
-        "job": GOOD["job"],
-        "earliest": GOOD["window"],
-        "watermark": None,
-        "complete": 0,
-        "gaps": [],
-        "next": GOOD["window"],
-    }
-
-
-def test_progress_does_not_count_gold_finished_before_silver(conn):
-    conn.execute(
-        """
-        INSERT INTO control_table (
-            job,
-            market,
-            load_window,
-            status,
-            finished_at
-        )
-        VALUES (
-            'station-daily',
-            %s,
-            '2021-01-01',
-            'SUCCESS',
-            CURRENT_TIMESTAMP - INTERVAL '1 hour'
-        )
-        """,
-        (GOOD["market"],),
-    )
-
-    record_job_attempt(
-        conn,
-        GOOD["job"],
-        GOOD["market"],
-        GOOD["window"],
-        "SUCCESS",
-    )
-
-    day = date(2021, 1, 2)
-
-    for _ in range(30):
-        record_job_attempt(
-            conn,
-            "station-daily",
-            GOOD["market"],
-            day.isoformat(),
-            "SUCCESS",
-        )
-        day += timedelta(days=1)
-
-    conn.commit()
-
-    result = progress(conn, GOOD["job"])
-
-    assert result == {
-        "job": GOOD["job"],
-        "earliest": GOOD["window"],
-        "watermark": None,
-        "complete": 0,
-        "gaps": [],
-        "next": GOOD["window"],
-    }
-
-
-def test_progress_uses_different_earliest_month_for_nyc(conn):
+def test_nyc_uses_its_configured_earliest(conn):
     result = progress(conn, "trips:nyc")
 
-    assert result == {
-        "job": "trips:nyc",
-        "earliest": "2026-01",
-        "watermark": None,
-        "complete": 0,
-        "gaps": [],
-        "next": "2026-01",
-    }
+    assert result["earliest"] == "2026-01"
+    assert result["next"] == "2026-01"

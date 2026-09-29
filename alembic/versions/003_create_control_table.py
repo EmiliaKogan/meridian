@@ -23,6 +23,8 @@ def upgrade() -> None:
         """
         CREATE TABLE control_table (
             id BIGSERIAL PRIMARY KEY,
+            layer TEXT NOT NULL
+                CHECK (layer IN ('bronze', 'silver', 'gold')),
             job TEXT NOT NULL,
             market TEXT NOT NULL,
             load_window TEXT NOT NULL,
@@ -32,6 +34,7 @@ def upgrade() -> None:
         )
         """
     )
+
 
 
 def downgrade() -> None:

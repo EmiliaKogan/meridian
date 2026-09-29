@@ -3,21 +3,33 @@ from calendar import monthrange
 from meridian.operational.config import EARLIEST
 
 
-def _silver_finished_at(conn, job: str, market: str, month: str):
+def _latest_success(
+    conn,
+    layer: str,
+    job: str,
+    market: str,
+    window: str,
+    after=None,
+):
+    query = """
+        SELECT finished_at
+        FROM control_table
+        WHERE layer = %s
+          AND job = %s
+          AND market = %s
+          AND load_window = %s
+          AND status = 'SUCCESS'
+    """
+    params = [layer, job, market, window]
+
+    if after is not None:
+        query += " AND finished_at >= %s"
+        params.append(after)
+
+    query += " ORDER BY finished_at DESC LIMIT 1"
+
     with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT finished_at
-            FROM control_table
-            WHERE job = %s
-              AND market = %s
-              AND load_window = %s
-              AND status = 'SUCCESS'
-            ORDER BY finished_at DESC
-            LIMIT 1
-            """,
-            (job, market, month),
-        )
+        cur.execute(query, params)
         row = cur.fetchone()
 
     return row[0] if row else None
@@ -27,73 +39,64 @@ def _days_in_month(month: str) -> int:
     year, month_number = map(int, month.split("-"))
     return monthrange(year, month_number)[1]
 
+def _month_bounds(month: str) -> tuple[str, str]:
+    days = _days_in_month(month)
+    return f"{month}-01", f"{month}-{days:02d}"
 
-def _gold_day_count(
-    conn,
-    market: str,
-    month: str,
-    days: int,
-    silver_finished_at,
-) -> int:
+
+def _gold_day_count(conn, market: str, month: str, silver_finished_at,) -> int:
+    first_day, last_day = _month_bounds(month)
+
     with conn.cursor() as cur:
         cur.execute(
             """
             SELECT COUNT(DISTINCT load_window)
             FROM control_table
-            WHERE job = 'station-daily'
+            WHERE layer = 'gold'
+              AND job = 'station-daily'
               AND market = %s
-              AND load_window >= %s
-              AND load_window <= %s
+              AND load_window BETWEEN %s AND %s
               AND status = 'SUCCESS'
               AND finished_at >= %s
             """,
-            (
-                market,
-                f"{month}-01",
-                f"{month}-{days:02d}",
-                silver_finished_at,
-            ),
+            (market, first_day, last_day, silver_finished_at),
         )
         return cur.fetchone()[0]
 
 
-def _gold_days_complete(
+def _month_is_complete(
     conn,
+    job: str,
     market: str,
     month: str,
-    silver_finished_at,
 ) -> bool:
-    days = _days_in_month(month)
+    bronze = _latest_success(
+        conn, "bronze", job, market, month
+    )
 
-    gold_count = _gold_day_count(
+    if bronze is None:
+        return False
+
+    silver = _latest_success(
+        conn, "silver", job, market, month, bronze
+    )
+
+    if silver is None:
+        return False
+
+    return _gold_day_count(
         conn,
         market,
         month,
-        days,
-        silver_finished_at,
-    )
-
-    return gold_count == days
+        silver,
+    ) == _days_in_month(month)
 
 
-def _month_is_complete(conn, job: str, market: str, month: str,) -> bool:
-    silver_finished_at = _silver_finished_at(conn, job, market, month,)
-
-    if silver_finished_at is None:
-        return False
-
-    return _gold_days_complete(conn, market, month,silver_finished_at,)
-
-
-def _completed_months(conn, job: str, market: str, months: list[str],) -> list[str]:
-    return [
-        month
-        for month in months
-        if _month_is_complete(conn, job, market, month)
-    ]
-
-
-def _published_months(conn, job: str, market: str) -> list[str]:
+def _candidate_months(
+    conn,
+    job: str,
+    market: str,
+) -> list[str]:
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -101,12 +104,25 @@ def _published_months(conn, job: str, market: str) -> list[str]:
             FROM control_table
             WHERE job = %s
               AND market = %s
-              AND status = 'SUCCESS'
+              AND layer IN ('bronze', 'silver')
             ORDER BY load_window
             """,
             (job, market),
         )
         return [row[0] for row in cur.fetchall()]
+
+
+def _completed_months(
+    conn,
+    job: str,
+    market: str,
+    months: list[str],
+) -> list[str]:
+    return [
+        month
+        for month in months
+        if _month_is_complete(conn, job, market, month)
+    ]
 
 
 def _next_month(month: str) -> str:
@@ -118,7 +134,10 @@ def _next_month(month: str) -> str:
     return f"{year}-{month_number + 1:02d}"
 
 
-def _calculate_watermark(earliest: str, completed: set[str],) -> tuple[str | None, str]:
+def _calculate_watermark(
+    earliest: str,
+    completed: set[str],
+) -> tuple[str | None, str]:
     watermark = None
     month = earliest
 
@@ -129,14 +148,19 @@ def _calculate_watermark(earliest: str, completed: set[str],) -> tuple[str | Non
     return watermark, month
 
 
-def _find_gaps(watermark: str | None, newest: str | None, completed: set[str], first_incomplete: str,) -> list[str]:
-    if watermark is None or newest is None or first_incomplete > newest:
+def _find_gaps(
+    watermark: str | None,
+    newest_complete: str | None,
+    completed: set[str],
+    first_incomplete: str,
+) -> list[str]:
+    if watermark is None or newest_complete is None:
         return []
 
     gaps = []
     month = first_incomplete
 
-    while month <= newest:
+    while month < newest_complete:
         if month not in completed:
             gaps.append(month)
 
@@ -145,29 +169,35 @@ def _find_gaps(watermark: str | None, newest: str | None, completed: set[str], f
     return gaps
 
 
+# def _next_due(
+#     earliest: str,
+#     completed: set[str],
+#     newest: str | None,
+# ) -> str:
+#     month = earliest
+
+#     while month in completed:
+#         month = _next_month(month)
+
+#     if newest is None or month <= newest:
+#         return month
+
+#     return month
+
+
 def progress(conn, job: str) -> dict:
     earliest = EARLIEST[job]
     market = job.split(":")[1]
-
-    published = _published_months(conn, job, market)
-    completed = set(_completed_months(conn, job, market, published,))
-
+    candidates = _candidate_months(conn, job, market)
+    completed = set(_completed_months(conn, job, market, candidates))
     watermark, first_incomplete = _calculate_watermark(earliest, completed,)
-
-    newest = published[-1] if published else None
-
-    if newest is None:
-        next_month = earliest
-    elif first_incomplete <= newest:
-        next_month = first_incomplete
-    else:
-        next_month = None
+    newest_complete = max(completed) if completed else None
 
     return {
         "job": job,
         "earliest": earliest,
         "watermark": watermark,
         "complete": len(completed),
-        "gaps": _find_gaps(watermark, newest, completed, first_incomplete,),
-        "next": next_month,
+        "gaps": _find_gaps(watermark, newest_complete, completed, first_incomplete,),
+        "next": first_incomplete,
     }

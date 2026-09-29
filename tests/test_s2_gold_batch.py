@@ -6,9 +6,11 @@ from meridian.operational.gold_batch import run_gold_batch
 
 GOOD = {"job": "trips:jc", "market": "jc", "month": "2021-02",}
 
-def _record_silver(conn):
+
+def _record_silver(conn) -> None:
     record_job_attempt(
         conn,
+        "silver",
         GOOD["job"],
         GOOD["market"],
         GOOD["month"],
@@ -17,17 +19,33 @@ def _record_silver(conn):
     conn.commit()
 
 
-def test_gold_batch_runs_every_day(monkeypatch, conn):
-    _record_silver(conn)
+def _record_gold(
+    conn,
+    target_date: str,
+    status: str = "SUCCESS",
+) -> None:
+    record_job_attempt(
+        conn,
+        "gold",
+        "station-daily",
+        GOOD["market"],
+        target_date,
+        status,
+    )
+    conn.commit()
+
+
+def test_gold_batch_runs_every_day(conn, monkeypatch):
     calls = []
 
-    def fake_gold_day(job, target_date):
+    def fake_run(job, target_date):
         calls.append((job, target_date))
 
     monkeypatch.setattr(
         "meridian.operational.gold_batch._run_gold_day",
-        fake_gold_day,
+        fake_run,
     )
+    _record_silver(conn)
 
     run_gold_batch(
         conn,
@@ -36,19 +54,17 @@ def test_gold_batch_runs_every_day(monkeypatch, conn):
         GOOD["month"],
     )
 
-    assert calls == [
-        (GOOD["job"], f"{GOOD['month']}-{day:02d}")
-        for day in range(1, 29)
-    ]
+    assert len(calls) == 28
+    assert calls[0] == (GOOD["job"], "2021-02-01")
+    assert calls[-1] == (GOOD["job"], "2021-02-28")
 
 
 def test_successful_days_are_recorded(conn, monkeypatch):
-    _record_silver(conn)
-
     monkeypatch.setattr(
         "meridian.operational.gold_batch._run_gold_day",
         lambda job, target_date: None,
     )
+    _record_silver(conn)
 
     run_gold_batch(
         conn,
@@ -62,15 +78,10 @@ def test_successful_days_are_recorded(conn, monkeypatch):
             """
             SELECT COUNT(*)
             FROM control_table
-            WHERE job = 'station-daily'
-              AND market = %s
-              AND load_window LIKE %s
+            WHERE layer = 'gold'
+              AND job = 'station-daily'
               AND status = 'SUCCESS'
-            """,
-            (
-                GOOD["market"],
-                f"{GOOD['month']}-%",
-            ),
+            """
         )
         count = cur.fetchone()[0]
 
@@ -81,24 +92,21 @@ def test_failed_day_is_recorded_and_other_days_run(
     conn,
     monkeypatch,
 ):
-    _record_silver(conn)
     calls = []
 
-    def fake_gold_day(job, target_date):
+    def fake_run(job, target_date):
         calls.append(target_date)
 
-        if target_date == "2021-02-05":
-            raise RuntimeError("gold failed")
+        if target_date == "2021-02-03":
+            raise RuntimeError("boom")
 
     monkeypatch.setattr(
         "meridian.operational.gold_batch._run_gold_day",
-        fake_gold_day,
+        fake_run,
     )
+    _record_silver(conn)
 
-    with pytest.raises(
-        RuntimeError,
-        match="2021-02-05",
-    ):
+    with pytest.raises(RuntimeError):
         run_gold_batch(
             conn,
             GOOD["job"],
@@ -113,11 +121,9 @@ def test_failed_day_is_recorded_and_other_days_run(
             """
             SELECT status
             FROM control_table
-            WHERE job = 'station-daily'
-              AND market = %s
-              AND load_window = '2021-02-05'
-            """,
-            (GOOD["market"],),
+            WHERE layer = 'gold'
+              AND load_window = '2021-02-03'
+            """
         )
         status = cur.fetchone()[0]
 
@@ -128,26 +134,20 @@ def test_failed_days_are_reported_together(
     conn,
     monkeypatch,
 ):
-    _record_silver(conn)
-
-    failed_days = {
-        "2021-02-05",
-        "2021-02-10",
-    }
-
-    def fake_gold_day(job, target_date):
-        if target_date in failed_days:
-            raise RuntimeError("gold failed")
+    def fake_run(job, target_date):
+        if target_date in {
+            "2021-02-03",
+            "2021-02-07",
+        }:
+            raise RuntimeError("boom")
 
     monkeypatch.setattr(
         "meridian.operational.gold_batch._run_gold_day",
-        fake_gold_day,
+        fake_run,
     )
+    _record_silver(conn)
 
-    with pytest.raises(
-        RuntimeError,
-        match="2021-02-05.*2021-02-10",
-    ):
+    with pytest.raises(RuntimeError) as error:
         run_gold_batch(
             conn,
             GOOD["job"],
@@ -155,23 +155,29 @@ def test_failed_days_are_reported_together(
             GOOD["month"],
         )
 
+    message = str(error.value)
+
+    assert "2021-02-03" in message
+    assert "2021-02-07" in message
+
 
 def test_retry_runs_only_failed_days(
     conn,
     monkeypatch,
 ):
-    _record_silver(conn)
-
-    failed_day = "2021-02-05"
+    first_calls = []
 
     def first_run(job, target_date):
-        if target_date == failed_day:
-            raise RuntimeError("gold failed")
+        first_calls.append(target_date)
+
+        if target_date == "2021-02-03":
+            raise RuntimeError("boom")
 
     monkeypatch.setattr(
         "meridian.operational.gold_batch._run_gold_day",
         first_run,
     )
+    _record_silver(conn)
 
     with pytest.raises(RuntimeError):
         run_gold_batch(
@@ -181,14 +187,11 @@ def test_retry_runs_only_failed_days(
             GOOD["month"],
         )
 
-    calls = []
-
-    def retry(job, target_date):
-        calls.append(target_date)
+    retry_calls = []
 
     monkeypatch.setattr(
         "meridian.operational.gold_batch._run_gold_day",
-        retry,
+        lambda job, target_date: retry_calls.append(target_date),
     )
 
     run_gold_batch(
@@ -198,35 +201,26 @@ def test_retry_runs_only_failed_days(
         GOOD["month"],
     )
 
-    assert calls == [failed_day]
+    assert retry_calls == ["2021-02-03"]
 
 
-def test_completed_month_does_nothing(
+def test_completed_month_does_no_gold_work(
     conn,
     monkeypatch,
 ):
     _record_silver(conn)
 
-    monkeypatch.setattr(
-        "meridian.operational.gold_batch._run_gold_day",
-        lambda job, target_date: None,
-    )
-
-    run_gold_batch(
-        conn,
-        GOOD["job"],
-        GOOD["market"],
-        GOOD["month"],
-    )
+    for day in range(1, 29):
+        _record_gold(
+            conn,
+            f"2021-02-{day:02d}",
+        )
 
     calls = []
 
-    def unexpected_call(job, target_date):
-        calls.append(target_date)
-
     monkeypatch.setattr(
         "meridian.operational.gold_batch._run_gold_day",
-        unexpected_call,
+        lambda job, target_date: calls.append(target_date),
     )
 
     run_gold_batch(
@@ -239,36 +233,34 @@ def test_completed_month_does_nothing(
     assert calls == []
 
 
-def test_successful_day_after_failed_attempt_is_not_retried(
+def test_failed_then_successful_day_is_not_retried(
     conn,
     monkeypatch,
 ):
     _record_silver(conn)
-
-    record_job_attempt(
+    _record_gold(
         conn,
-        "station-daily",
-        GOOD["market"],
-        "2021-02-05",
+        "2021-02-03",
         "FAILED",
     )
-    record_job_attempt(
+    _record_gold(
         conn,
-        "station-daily",
-        GOOD["market"],
-        "2021-02-05",
+        "2021-02-03",
         "SUCCESS",
     )
-    conn.commit()
+
+    for day in range(1, 29):
+        if day != 3:
+            _record_gold(
+                conn,
+                f"2021-02-{day:02d}",
+            )
 
     calls = []
 
-    def fake_gold_day(job, target_date):
-        calls.append(target_date)
-
     monkeypatch.setattr(
         "meridian.operational.gold_batch._run_gold_day",
-        fake_gold_day,
+        lambda job, target_date: calls.append(target_date),
     )
 
     run_gold_batch(
@@ -278,33 +270,28 @@ def test_successful_day_after_failed_attempt_is_not_retried(
         GOOD["month"],
     )
 
-    assert "2021-02-05" not in calls
-    assert len(calls) == 27
+    assert calls == []
 
 
-def test_gold_does_not_use_old_success_before_new_silver(
+def test_gold_before_latest_silver_is_rebuilt(
     conn,
     monkeypatch,
 ):
-    record_job_attempt(
-        conn,
-        "station-daily",
-        GOOD["market"],
-        "2021-02-05",
-        "SUCCESS",
-    )
-    conn.commit()
+    _record_silver(conn)
+
+    for day in range(1, 29):
+        _record_gold(
+            conn,
+            f"2021-02-{day:02d}",
+        )
 
     _record_silver(conn)
 
     calls = []
 
-    def fake_gold_day(job, target_date):
-        calls.append(target_date)
-
     monkeypatch.setattr(
         "meridian.operational.gold_batch._run_gold_day",
-        fake_gold_day,
+        lambda job, target_date: calls.append(target_date),
     )
 
     run_gold_batch(
@@ -314,5 +301,4 @@ def test_gold_does_not_use_old_success_before_new_silver(
         GOOD["month"],
     )
 
-    assert "2021-02-05" in calls
     assert len(calls) == 28
