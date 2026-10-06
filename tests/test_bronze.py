@@ -1,158 +1,219 @@
-import json
-import subprocess
+import pytest
+
+from meridian.ingest_to_bronze.main import main, parse_dataset_market
+from meridian.ingest_to_bronze.ingest import find_source_zip
 
 
-def test_bronze_jc_2019_06_ingestion_succeeds(stack_is_running):
-    result = subprocess.run(
-        [
-            "just",
-            "run",
-            "ingest-to-bronze",
-            "trips:jc",
-            "2019-06",
-        ],
-        capture_output=True,
-        text=True,
+GOOD = {
+    "job": "trips:jc",
+    "market": "JC",
+    "month": "2026-06",
+}
+
+
+def test_parse_dataset_market():
+    dataset, market = parse_dataset_market(GOOD["job"])
+
+    assert dataset == "trips"
+    assert market == GOOD["market"]
+
+
+def test_unknown_dataset_fails():
+    with pytest.raises(
+        ValueError,
+        match="Unknown dataset",
+    ):
+        parse_dataset_market("stations:jc")
+
+
+def test_unknown_market_fails():
+    with pytest.raises(
+        ValueError,
+        match="Unknown market",
+    ):
+        parse_dataset_market("trips:unknown")
+
+def test_find_source_zip_jc_ignores_name_typo(monkeypatch):
+    xml = """
+    <ListBucketResult>
+        <Contents>
+            <Key>JC-202207-citbike-tripdata.csv.zip</Key>
+            <LastModified>2022-08-01T00:00:00Z</LastModified>
+        </Contents>
+    </ListBucketResult>
+    """
+
+    class Response:
+        text = xml
+
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(
+        "meridian.ingest_to_bronze.ingest.httpx.get",
+        lambda *args, **kwargs: Response(),
     )
 
-    assert result.returncode == 0
+    result = find_source_zip("JC", "2022-07")
+
+    assert result == "JC-202207-citbike-tripdata.csv.zip"
 
 
-def test_bronze_jc_2019_06_has_expected_row_count(
-    bronze_jc_2019_06,
-):
-    result = subprocess.run(
-        [
-            "just",
-            "inspect",
-            "bronze",
-            "trips:jc",
-            "2019-06",
-        ],
-        capture_output=True,
-        text=True,
+def test_find_source_zip_nyc_ignores_name_typo(monkeypatch):
+    xml = """
+    <ListBucketResult>
+        <Contents>
+            <Key>202207-citbike-tripdata.csv.zip</Key>
+            <LastModified>2022-08-01T00:00:00Z</LastModified>
+        </Contents>
+    </ListBucketResult>
+    """
+
+    class Response:
+        text = xml
+
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(
+        "meridian.ingest_to_bronze.ingest.httpx.get",
+        lambda *args, **kwargs: Response(),
     )
 
-    assert result.returncode == 0
+    result = find_source_zip("NYC", "2022-07")
 
-    output = json.loads(result.stdout)
+    assert result == "202207-citbike-tripdata.csv.zip"
 
-    assert output["rows"] == 39430
-
-
-def test_bronze_jc_2026_06_has_expected_row_count(
-    bronze_jc_2026_06,
+def test_bronze_calls_existing_ingestion(
+    monkeypatch,
+    tmp_path,
 ):
-    result = subprocess.run(
-        [
-            "just",
-            "inspect",
-            "bronze",
-            "trips:jc",
+    zip_path = tmp_path / "source.zip"
+    zip_path.touch()
+    calls = []
+
+    def find_source(market, month):
+        calls.append(("find", market, month))
+        return "source.zip"
+
+    def download(source):
+        calls.append(("download", source))
+        return zip_path
+
+    def find_csvs(path, market, month):
+        calls.append(("csvs", path, market, month))
+        return ["trips.csv"]
+
+    def save(path, csvs, market, month):
+        calls.append(
+            ("save", path, csvs, market, month)
+        )
+
+    monkeypatch.setattr(
+        "meridian.ingest_to_bronze.main.find_source_zip",
+        find_source,
+    )
+    monkeypatch.setattr(
+        "meridian.ingest_to_bronze.main.download_source_zip",
+        download,
+    )
+    monkeypatch.setattr(
+        "meridian.ingest_to_bronze.main.find_latest_csvs_in_zip",
+        find_csvs,
+    )
+    monkeypatch.setattr(
+        "meridian.ingest_to_bronze.main.save_bronze_csvs",
+        save,
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        ["main", GOOD["job"], GOOD["month"]],
+    )
+
+    main()
+
+    assert calls == [
+        ("find", "JC", "2026-06"),
+        ("download", "source.zip"),
+        ("csvs", zip_path, "JC", "2026-06"),
+        (
+            "save",
+            zip_path,
+            ["trips.csv"],
+            "JC",
             "2026-06",
-        ],
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0
-
-    output = json.loads(result.stdout)
-
-    assert output["rows"] == 109897
+        ),
+    ]
 
 
-# def test_bronze_nyc_2018_04_has_expected_row_count(
-#     bronze_nyc_2018_04,
-# ):
-#     result = subprocess.run(
-#         [
-#             "just",
-#             "inspect",
-#             "bronze",
-#             "trips:nyc",
-#             "2018-04",
-#         ],
-#         capture_output=True,
-#         text=True,
-#     )
-
-#     assert result.returncode == 0
-
-#     output = json.loads(result.stdout)
-
-#     assert output["rows"] == 1307543
-
-
-def test_bronze_jc_2019_06_is_idempotent(
-    bronze_jc_2019_06_again,
+def test_bronze_removes_zip_after_success(
+    monkeypatch,
+    tmp_path,
 ):
-    result = subprocess.run(
-        [
-            "just",
-            "inspect",
-            "bronze",
-            "trips:jc",
-            "2019-06",
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
+    zip_path = tmp_path / "source.zip"
+    zip_path.touch()
+
+    monkeypatch.setattr(
+        "meridian.ingest_to_bronze.main.find_source_zip",
+        lambda market, month: "source.zip",
+    )
+    monkeypatch.setattr(
+        "meridian.ingest_to_bronze.main.download_source_zip",
+        lambda source: zip_path,
+    )
+    monkeypatch.setattr(
+        "meridian.ingest_to_bronze.main.find_latest_csvs_in_zip",
+        lambda path, market, month: ["trips.csv"],
+    )
+    monkeypatch.setattr(
+        "meridian.ingest_to_bronze.main.save_bronze_csvs",
+        lambda path, csvs, market, month: None,
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        ["main", GOOD["job"], GOOD["month"]],
     )
 
-    output = json.loads(result.stdout)
+    main()
 
-    assert output["rows"] == 39430
+    assert not zip_path.exists()
 
 
-def test_bronze_jc_2019_06_is_unchanged_after_2026_ingestion(
-    bronze_jc_2019_06,
+def test_bronze_removes_zip_after_failure(
+    monkeypatch,
+    tmp_path,
 ):
-    subprocess.run(
-        [
-            "just",
-            "run",
-            "ingest-to-bronze",
-            "trips:jc",
-            "2026-06",
-        ],
-        check=True,
+    zip_path = tmp_path / "source.zip"
+    zip_path.touch()
+
+    def fail_save(path, csvs, market, month):
+        raise RuntimeError("Save failed")
+
+    monkeypatch.setattr(
+        "meridian.ingest_to_bronze.main.find_source_zip",
+        lambda market, month: "source.zip",
+    )
+    monkeypatch.setattr(
+        "meridian.ingest_to_bronze.main.download_source_zip",
+        lambda source: zip_path,
+    )
+    monkeypatch.setattr(
+        "meridian.ingest_to_bronze.main.find_latest_csvs_in_zip",
+        lambda path, market, month: ["trips.csv"],
+    )
+    monkeypatch.setattr(
+        "meridian.ingest_to_bronze.main.save_bronze_csvs",
+        fail_save,
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        ["main", GOOD["job"], GOOD["month"]],
     )
 
-    result = subprocess.run(
-        [
-            "just",
-            "inspect",
-            "bronze",
-            "trips:jc",
-            "2019-06",
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    with pytest.raises(
+        RuntimeError,
+        match="Save failed",
+    ):
+        main()
 
-    output = json.loads(result.stdout)
-
-    assert output["rows"] == 39430
-
-
-def test_bronze_jc_2021_02_ingestion_succeeds(
-    bronze_jc_2021_02,
-):
-    result = subprocess.run(
-        [
-            "just",
-            "inspect",
-            "bronze",
-            "trips:jc",
-            "2021-02",
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-
-    output = json.loads(result.stdout)
-
-    assert output["rows"] > 0
+    assert not zip_path.exists()

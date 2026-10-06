@@ -39,12 +39,18 @@ def _days_in_month(month: str) -> int:
     year, month_number = map(int, month.split("-"))
     return monthrange(year, month_number)[1]
 
+
 def _month_bounds(month: str) -> tuple[str, str]:
     days = _days_in_month(month)
     return f"{month}-01", f"{month}-{days:02d}"
 
 
-def _gold_day_count(conn, market: str, month: str, silver_finished_at,) -> int:
+def _gold_day_count(
+    conn,
+    market: str,
+    month: str,
+    silver_finished_at,
+) -> int:
     first_day, last_day = _month_bounds(month)
 
     with conn.cursor() as cur:
@@ -64,7 +70,7 @@ def _gold_day_count(conn, market: str, month: str, silver_finished_at,) -> int:
         return cur.fetchone()[0]
 
 
-def _month_is_complete(
+def month_is_complete(
     conn,
     job: str,
     market: str,
@@ -121,7 +127,7 @@ def _completed_months(
     return [
         month
         for month in months
-        if _month_is_complete(conn, job, market, month)
+        if month_is_complete(conn, job, market, month)
     ]
 
 
@@ -169,28 +175,12 @@ def _find_gaps(
     return gaps
 
 
-# def _next_due(
-#     earliest: str,
-#     completed: set[str],
-#     newest: str | None,
-# ) -> str:
-#     month = earliest
-
-#     while month in completed:
-#         month = _next_month(month)
-
-#     if newest is None or month <= newest:
-#         return month
-
-#     return month
-
-
 def progress(conn, job: str) -> dict:
     earliest = EARLIEST[job]
     market = job.split(":")[1]
     candidates = _candidate_months(conn, job, market)
-    completed = set(_completed_months(conn, job, market, candidates))
-    watermark, first_incomplete = _calculate_watermark(earliest, completed,)
+    completed = set(_completed_months(conn, job, market, candidates,))
+    watermark, first_incomplete = _calculate_watermark( earliest, completed,)
     newest_complete = max(completed) if completed else None
 
     return {

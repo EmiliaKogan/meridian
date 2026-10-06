@@ -21,6 +21,11 @@ Stage 2 is divided into three layers:
    - Handles retries and waiting.
    - Does not implement business logic such as month selection or progress calculation.
 
+## JUST UP
+- Uses docker compose up -d.
+- Starts Stage 1 infrastructure and Airflow.
+- One Airflow container is sufficient.
+- All market schedules are OFF after initial startup.
 
 ## Control Table
 
@@ -69,6 +74,10 @@ just run pipeline <market>
 just run pipeline <market> <month>
 just run pipeline <market> <month> <month>
 
+- `just run pipeline ...` does not execute Stage 1 jobs directly.
+- It triggers Airflow DAG runs/backfills and waits for them to finish.
+- Airflow is the orchestrator for both manually triggered and scheduled pipeline runs.
+
 ### Gold batch retries
 
 - Each Gold day is recorded immediately after its attempt finishes.
@@ -77,8 +86,30 @@ just run pipeline <market> <month> <month>
 - The Gold batch fails after all days have been attempted if any day failed.
 - On retry, only days without a successful attempt after the current Silver are executed.
 
+### Airflow runtime
+
+- Stage 2 uses one Airflow container with a separate PostgreSQL metadata database.
+- Airflow has a dedicated image built from the official Airflow image.
+- Stage 1 Dockerfile and runtime remain unchanged.
+- Airflow DAG files declare the orchestration graph, while Meridian operational code remains under `src`.
+- The Meridian source directory is mounted into the Airflow container and is importable through `PYTHONPATH`.
+- Airflow uses `SimpleAuthManager` for local development with the `airflow` admin user.
+- New DAGs are paused by default.
 
 
+## DAG
+Bronze in-process:
+Reuse the existing functions from
+meridian.ingest_to_bronze.ingest.
+Do not call the CLI main() and do not modify Stage 1.
+
+Gold in-process:
+Reuse the existing database/transform functions from
+meridian.transform_to_gold.
+Do not call the CLI main() and do not modify Stage 1.
+
+Silver remains the only Stage 1 job executed through
+a subprocess / just command.
 
 
 

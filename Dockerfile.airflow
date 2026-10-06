@@ -1,0 +1,35 @@
+ARG AIRFLOW_IMAGE=apache/airflow:3.3.2-python3.14
+FROM ${AIRFLOW_IMAGE}
+
+USER root
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        docker.io \
+        docker-compose-plugin \
+    && rm -rf /var/lib/apt/lists/*
+
+USER airflow
+
+RUN pip install --no-cache-dir \
+    "psycopg[binary]>=3.3.4" \
+    "httpx>=0.28.1"
+
+
+
+
+
+
+
+
+# ARG AIRFLOW_IMAGE=apache/airflow:3.3.2-python3.14
+# FROM ${AIRFLOW_IMAGE}
+
+# RUN pip install --no-cache-dir \
+#     "psycopg[binary]>=3.3.4" \
+#     "httpx>=0.28.1"
+    
+
+# Create the Bronze directory as the Airflow user so the named
+# volume mounted here inherits Airflow's uid (50000).
+# RUN mkdir -p /opt/airflow/data/bronze

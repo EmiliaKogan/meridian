@@ -1,5 +1,5 @@
 from meridian.operational.control import record_job_attempt
-from meridian.operational.progress import progress
+from meridian.operational.progress import progress, month_is_complete
 
 
 GOOD = {"job": "trips:jc", "market": "jc", "month": "2021-01",}
@@ -247,3 +247,23 @@ def test_nyc_uses_its_configured_earliest(conn):
 
     assert result["earliest"] == "2026-01"
     assert result["next"] == "2026-01"
+
+
+def test_month_is_complete_for_complete_month(conn):
+    _complete_month(conn, GOOD["month"], 31)
+
+    assert month_is_complete(
+        conn,
+        GOOD["job"],
+        GOOD["market"],
+        GOOD["month"],
+    ) is True
+
+
+def test_month_is_not_complete_without_loads(conn):
+    assert month_is_complete(
+        conn,
+        GOOD["job"],
+        GOOD["market"],
+        GOOD["month"],
+    ) is False

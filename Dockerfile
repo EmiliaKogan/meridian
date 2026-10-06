@@ -14,7 +14,6 @@ RUN pip install uv
 # Install the locked project dependencies
 RUN uv sync --frozen
 
-# copy a file from your project into the image
 # Copy the application source code
 COPY src ./src
 

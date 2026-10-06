@@ -1,20 +1,59 @@
-import subprocess
 from calendar import monthrange
+from datetime import date
 
 from meridian.operational.control import record_job_attempt
+from meridian.transform_to_gold.database import (
+    delete_day,
+    insert_date,
+    insert_events,
+    insert_stations,
+)
+from meridian.transform_to_gold.transform import build_date_row
 
 
-def _run_gold_day(job: str, target_date: str) -> None:
-    subprocess.run(
-        [
-            "just",
-            "run",
-            "transform-to-gold",
-            "station-daily",
-            target_date,
-        ],
-        check=True,
-    )
+def _run_gold_day(conn, target_date: str) -> None:
+    target = date.fromisoformat(target_date)
+    delete_day(conn, target_date)
+    date_row = build_date_row(target)
+    insert_date(conn, date_row)
+    insert_stations(conn, target_date)
+    insert_events(conn, target_date)
+
+
+def _prepare_silver_workspace(conn, market: str, month: str) -> None:
+    month_start = f"{month}-01"
+
+    with conn.cursor() as cur:
+        cur.execute("DROP TABLE IF EXISTS pg_temp.silver_rides")
+        cur.execute(
+            """
+            CREATE TEMP TABLE silver_rides AS
+            SELECT *
+            FROM public.silver_rides
+            WHERE (
+                started_at >= %s::date
+                AND started_at < (%s::date + INTERVAL '1 month')
+            )
+            OR (
+                ended_at >= %s::date
+                AND ended_at < (%s::date + INTERVAL '1 month')
+            )
+            """,
+            (month_start, month_start, month_start, month_start),
+        )
+
+
+def _lock_day(
+    conn,
+    target_date: str,
+) -> None:
+    date_key = int(target_date.replace("-", ""))
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT pg_advisory_xact_lock(%s)",
+            (date_key,),
+        )
 
 
 def _silver_finished_at(
@@ -111,7 +150,6 @@ def _require_silver(
 
 def _run_missing_days(
     conn,
-    job: str,
     market: str,
     month: str,
     successful: set[str],
@@ -125,9 +163,11 @@ def _run_missing_days(
             continue
 
         try:
-            _run_gold_day(job, target_date)
+            _lock_day(conn, target_date)
+            _run_gold_day(conn, target_date)
             _record(conn, market, target_date, "SUCCESS")
         except Exception:
+            conn.rollback()
             _record(conn, market, target_date, "FAILED")
             failed.append(target_date)
 
@@ -141,29 +181,14 @@ def _raise_for_failed_days(failed: list[str]) -> None:
         )
 
 
-def run_gold_batch(
-    conn,
-    job: str,
-    market: str,
-    month: str,
-) -> None:
-    silver_finished_at = _require_silver(
-        conn,
-        job,
-        market,
-        month,
-    )
-    successful = _successful_days(
-        conn,
-        market,
-        month,
-        silver_finished_at,
-    )
-    failed = _run_missing_days(
-        conn,
-        job,
-        market,
-        month,
-        successful,
-    )
+def run_gold_batch(conn, job: str, market: str, month: str,) -> None:
+    silver_finished_at = _require_silver(conn, job, market, month,)
+    successful = _successful_days(conn, market, month, silver_finished_at,)
+
+    if len(successful) == _days_in_month(month):
+        return
+
+    _prepare_silver_workspace(conn, market, month,)
+
+    failed = _run_missing_days(conn, market, month, successful,)
     _raise_for_failed_days(failed)

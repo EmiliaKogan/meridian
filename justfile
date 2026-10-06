@@ -1,14 +1,24 @@
 # Start the Meridian stack.
 up:
-    docker compose up -d
+    docker compose up -d --wait postgres airflow-db
+    docker compose run --rm app uv run alembic upgrade head
+    docker compose up -d --wait airflow
 
 # Stop the Meridian stack.
 down:
     docker compose down
 
+# Enable or disable the Airflow schedule for a market.
+schedule market state:
+    docker compose run --rm --no-deps app uv run python -m meridian.operational.schedule {{market}} {{state}}
+
 # Run a Meridian job.
 run *args:
     just {{args}}
+
+# Run the Airflow pipeline for a market and optional month range.
+pipeline market *windows:
+    docker compose run --rm --no-deps app uv run python -m meridian.operational.pipeline {{market}} {{windows}}
 
 # Run the Bronze ingestion job.
 ingest-to-bronze job window:
@@ -22,9 +32,9 @@ transform-to-silver job window:
 transform-to-gold job window:
     docker compose run --rm app uv run python -m meridian.transform_to_gold.main {{job}} {{window}}
 
-# Inspect Bronze or Silver data.
-inspect layer job window:
-    docker compose run --rm app uv run python -m meridian.inspect.main {{layer}} {{job}} {{window}}
+# Inspect Meridian data and operational state.
+inspect *args:
+    docker compose run --rm app uv run python -m meridian.inspect.main {{args}}
 
 # Report daily station departures and arrivals.
 report report_type market station day:

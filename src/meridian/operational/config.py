@@ -7,3 +7,5 @@ JOBS = {
     "jc": "trips:jc",
     "nyc": "trips:nyc",
 }
+
+MARKETS = ("jc", "nyc")
