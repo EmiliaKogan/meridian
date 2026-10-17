@@ -1,10 +1,9 @@
 import subprocess
 import sys
 
-from meridian.ingest_to_bronze.main import main as bronze_main
-from meridian.ingest_to_bronze.main import parse_dataset_market
+from meridian.ingest_to_bronze.main import run as bronze_run
 from meridian.operational.control import record_job_attempt
-
+from meridian.parsing import parse_dataset_market
 
 def _run_container(module: str, job: str, month: str) -> None:
     """Run an existing Stage 1 job in the app container."""
@@ -30,20 +29,9 @@ def _run_container(module: str, job: str, month: str) -> None:
     )
 
 def run_bronze(job: str, month: str) -> None:
-    """Run the existing Stage 1 Bronze job in-process."""
-    original_argv = sys.argv
-    try:
-        sys.argv = ["ingest-to-bronze", job, month]
-        bronze_main()
-    finally:
-        sys.argv = original_argv
-# def run_bronze(job: str, month: str) -> None:
-#     """Run the existing Stage 1 Bronze job in its container."""
-#     _run_container(
-#         "meridian.ingest_to_bronze.main",
-#         job,
-#         month,
-#     )
+    """Run Bronze in-process."""
+    bronze_run(job, month)
+
 
 
 def run_silver(job: str, month: str) -> None:

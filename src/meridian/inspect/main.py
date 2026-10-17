@@ -6,24 +6,15 @@ from pathlib import Path
 
 import psycopg
 
+from meridian.paths import data_window_dir
 from meridian.operational.client import dag_id, request, token
 from meridian.operational.config import EARLIEST, MARKETS
 from meridian.operational.progress import progress
-
-
-def parse_dataset_market(value: str) -> tuple[str, str]:
-    dataset, market = value.split(":", 1)
-    if dataset != "trips":
-        raise ValueError(f"Unknown dataset: {dataset}")
-    market = market.upper()
-    if market not in {"NYC", "JC"}:
-        raise ValueError(f"Unknown market: {market}")
-    return dataset, market
+from meridian.parsing import parse_dataset_market
 
 
 def inspect_bronze(market: str, data_window: str) -> None:
-    year, month = data_window.split("-")
-    bronze_dir = Path("/data/bronze") / market / year / month
+    bronze_dir = data_window_dir(market, data_window)
     csv_files = sorted(bronze_dir.glob("*.csv"))
     total_rows = 0
     for csv_file in csv_files:

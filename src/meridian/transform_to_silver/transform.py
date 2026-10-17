@@ -1,5 +1,6 @@
 import csv
 from pathlib import Path
+from datetime import datetime
 
 def empty_to_none(value):
     return None if value == "" else value
@@ -36,6 +37,14 @@ def conform_old(row: dict, market: str, data_window: str) -> dict:
         "end_lng": empty_to_none(row["end station longitude"]),
     }
 
+def is_valid_timestamp(value: str) -> bool:
+    try:
+        datetime.fromisoformat(value)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+    
 
 def get_reject_reason(row: dict) -> str | None:
     if not row["started_at"]:
@@ -44,6 +53,12 @@ def get_reject_reason(row: dict) -> str | None:
     if not row["ended_at"]:
         return "missing end time"
 
+    if not is_valid_timestamp(row["started_at"]):
+        return "invalid start time"
+
+    if not is_valid_timestamp(row["ended_at"]):
+        return "invalid end time"
+
     if not row["start_station_id"]:
         return "never started at a station"
 
@@ -51,6 +66,7 @@ def get_reject_reason(row: dict) -> str | None:
         return "never docked"
 
     return None
+
 
 
 def transform_file(csv_file: Path, market: str, data_window: str,) -> tuple[list[dict], list[dict]]:
@@ -73,6 +89,7 @@ def transform_file(csv_file: Path, market: str, data_window: str,) -> tuple[list
                 valid_rows.append(conformed)
             else:
                 conformed["reason"] = reason
+                conformed["raw_row"] = row.copy()
                 reject_rows.append(conformed)
 
     return valid_rows, reject_rows

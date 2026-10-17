@@ -62,10 +62,7 @@ def test_inspect_bronze_reports_files(
         encoding="utf-8",
     )
 
-    monkeypatch.setattr(
-        "meridian.inspect.main.Path",
-        lambda value: tmp_path,
-    )
+    monkeypatch.setenv("BRONZE_DIR", str(tmp_path))
 
     inspect_bronze(
         GOOD["market"],

@@ -9,7 +9,7 @@ from meridian.operational.client import dag_id, request, token
 from meridian.operational.config import EARLIEST
 from meridian.operational.progress import month_is_complete, progress
 from meridian.operational.publication import is_published
-
+from meridian.parsing import parse_month
 
 POLL_SECONDS = 3
 BACKFILL_MAX_ACTIVE_RUNS = 3
@@ -22,20 +22,10 @@ def _job_for_market(market: str) -> str:
     return job
 
 
-def _validate_month(job: str, month: str) -> None:
-    try:
-        year, number = map(int, month.split("-"))
-        valid = len(month) == 7 and month[4] == "-"
-        valid &= year >= 1 and 1 <= number <= 12
-    except ValueError:
-        valid = False
-    if not valid:
-        raise ValueError(f"Invalid month: {month}")
-
-
 def _validate_range(job: str, start: str, end: str) -> None:
-    _validate_month(job, start)
-    _validate_month(job, end)
+    parse_month(start)
+    parse_month(end)
+
     if start > end:
         raise ValueError("Start month cannot be after end month")
 
@@ -156,7 +146,7 @@ def run_pipeline(
         _run_backfill(market, start_month, end_month)
         return
     if start_month is not None:
-        _validate_month(job, start_month)
+        parse_month(start_month)
         _run_named_month(market, start_month)
         return
     month = _next_due_month(job)

@@ -1,15 +1,11 @@
 import psycopg
+from psycopg.types.json import Jsonb
 
 
 BATCH_SIZE = 1_000
 
 
-def _insert(
-    conn: psycopg.Connection,
-    query: str,
-    values: list[tuple],
-    batch_size: int = BATCH_SIZE,
-) -> int:
+def _insert(conn: psycopg.Connection, query: str, values: list[tuple], batch_size: int = BATCH_SIZE,) -> int:
     inserted = 0
 
     for start in range(0, len(values), batch_size):
@@ -43,10 +39,7 @@ def delete_window(conn: psycopg.Connection, market: str, data_window: str,) -> N
         )
 
 
-def insert_silver_rides(
-    conn: psycopg.Connection,
-    rows: list[dict],
-) -> int:
+def insert_silver_rides(conn: psycopg.Connection, rows: list[dict],) -> int:
     query = """
         INSERT INTO silver_rides (
             market,
@@ -89,10 +82,7 @@ def insert_silver_rides(
     return _insert(conn, query, values)
 
 
-def insert_silver_rejects(
-    conn: psycopg.Connection,
-    rows: list[dict],
-) -> int:
+def insert_silver_rejects(conn: psycopg.Connection, rows: list[dict],) -> int:
     query = """
         INSERT INTO silver_rejects (
             market,
@@ -107,10 +97,11 @@ def insert_silver_rejects(
             start_lng,
             end_lat,
             end_lng,
-            reason
+            reason,
+            raw_row     
         )
         VALUES (
-            %s, %s, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s, %s, %s,
             %s, %s, %s, %s, %s, %s, %s
         )
     """
@@ -130,6 +121,7 @@ def insert_silver_rejects(
             row["end_lat"],
             row["end_lng"],
             row["reason"],
+            Jsonb(row["raw_row"]),
         )
         for row in rows
     ]

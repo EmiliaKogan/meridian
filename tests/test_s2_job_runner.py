@@ -66,23 +66,23 @@ class _ConnectionSpy:
 
 
 def test_run_bronze_calls_stage1_in_process(monkeypatch):
-    """Bronze calls the existing Stage 1 job in-process."""
+    """Bronze calls the Stage 1 job directly with explicit arguments."""
+    from meridian.operational.job_runner import run_bronze
+
     calls = []
 
-    def fake_main():
-        calls.append(list(__import__("sys").argv))
+    def fake_bronze_run(job, month):
+        calls.append((job, month))
 
     monkeypatch.setattr(
-        "meridian.operational.job_runner.bronze_main",
-        fake_main,
+        "meridian.operational.job_runner.bronze_run",
+        fake_bronze_run,
     )
 
-    run_bronze(*GOOD)
+    run_bronze("trips:jc", "2026-06")
 
-    assert calls == [
-        ["ingest-to-bronze", "trips:jc", "2026-06"]
-    ]
-
+    assert calls == [("trips:jc", "2026-06")]
+    
 
 def test_run_silver_runs_stage1_container(monkeypatch):
     """Silver runs the existing Stage 1 job in the app container."""

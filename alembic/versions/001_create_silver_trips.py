@@ -53,7 +53,8 @@ def upgrade() -> None:
             start_lng DOUBLE PRECISION,
             end_lat DOUBLE PRECISION,
             end_lng DOUBLE PRECISION,
-            reason TEXT NOT NULL
+            reason TEXT NOT NULL,
+            raw_row JSONB NOT NULL
         );
     """)
 
