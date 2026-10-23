@@ -1,6 +1,9 @@
 import subprocess
 
+import pytest
 
+
+@pytest.mark.usefixtures("isolated_compose")
 def test_just_up_succeeds():
     result = subprocess.run(
         ["just", "up"],
@@ -11,19 +14,13 @@ def test_just_up_succeeds():
     assert result.returncode == 0
 
 
+@pytest.mark.usefixtures("isolated_compose")
 def test_postgres_is_available(stack_is_running):
     result = subprocess.run(
         [
-            "docker",
-            "compose",
-            "exec",
-            "-T",
-            "postgres",
-            "pg_isready",
-            "-U",
-            "meridian",
-            "-d",
-            "meridian",
+            "docker", "compose", "exec", "-T",
+            "postgres", "pg_isready",
+            "-U", "meridian", "-d", "meridian",
         ],
         capture_output=True,
         text=True,
@@ -32,6 +29,7 @@ def test_postgres_is_available(stack_is_running):
     assert result.returncode == 0
 
 
+@pytest.mark.usefixtures("isolated_compose")
 def test_just_down_succeeds():
     result = subprocess.run(
         ["just", "down"],
@@ -42,6 +40,7 @@ def test_just_down_succeeds():
     assert result.returncode == 0
 
 
+@pytest.mark.usefixtures("isolated_compose")
 def test_just_down_stops_postgres(stack_is_running):
     result = subprocess.run(
         ["just", "down"],
@@ -53,12 +52,8 @@ def test_just_down_stops_postgres(stack_is_running):
 
     result = subprocess.run(
         [
-            "docker",
-            "compose",
-            "ps",
-            "--services",
-            "--filter",
-            "status=running",
+            "docker", "compose", "ps",
+            "--services", "--filter", "status=running",
         ],
         capture_output=True,
         text=True,

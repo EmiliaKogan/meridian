@@ -11,33 +11,44 @@ from testcontainers.community.postgres import PostgresContainer
 
 @pytest.fixture(scope="session")
 def pg_url() -> Iterator[str]:
-    """Start a temporary PostgreSQL container and yield its connection URL."""
+    """Start an isolated PostgreSQL test database."""
     with PostgresContainer("postgres:16-alpine", driver=None) as postgres:
         yield postgres.get_connection_url()
 
 
 @pytest.fixture(scope="session")
 def migrated(pg_url: str) -> str:
-    """Apply all Alembic migrations to the test database."""
+    """Apply migrations to the test database."""
+    previous_url = os.environ.get("DATABASE_URL")
     os.environ["DATABASE_URL"] = pg_url
 
-    config = Config("alembic.ini")
-    command.upgrade(config, "head")
-
-    return pg_url
+    try:
+        command.upgrade(Config("alembic.ini"), "head")
+        yield pg_url
+    finally:
+        if previous_url is None:
+            os.environ.pop("DATABASE_URL", None)
+        else:
+            os.environ["DATABASE_URL"] = previous_url
 
 
 @pytest.fixture
 def conn(migrated: str):
-    """Provide a connection to the migrated test database."""
-    with psycopg.connect(migrated) as conn:
-        yield conn
+    """Connect to the isolated test database."""
+    with psycopg.connect(migrated) as connection:
+        yield connection
 
 
 @pytest.fixture(autouse=True)
 def clean_control_table(conn):
     conn.execute("DELETE FROM control_table")
     conn.commit()
+
+
+@pytest.fixture
+def isolated_compose(monkeypatch):
+    """Use a separate Docker Compose project for infrastructure tests."""
+    monkeypatch.setenv("COMPOSE_PROJECT_NAME", "meridian_pytest")
 
 
 @pytest.fixture
@@ -71,72 +82,44 @@ def pipeline_stage_spies(monkeypatch):
 
 @pytest.fixture
 def stack_is_running():
-    subprocess.run(
-        ["just", "up"],
-        check=True,
-    )
+    subprocess.run(["just", "up"], check=True)
+
 
 @pytest.fixture
 def bronze_jc_2019_06(stack_is_running):
     subprocess.run(
-        [
-            "just",
-            "run",
-            "ingest-to-bronze",
-            "trips:jc",
-            "2019-06",
-        ],
+        ["just", "run", "ingest-to-bronze", "trips:jc", "2019-06"],
         check=True,
     )
+
 
 @pytest.fixture
 def bronze_jc_2026_06(stack_is_running):
     subprocess.run(
-        [
-            "just",
-            "run",
-            "ingest-to-bronze",
-            "trips:jc",
-            "2026-06",
-        ],
+        ["just", "run", "ingest-to-bronze", "trips:jc", "2026-06"],
         check=True,
     )
+
 
 @pytest.fixture
 def bronze_nyc_2018_04(stack_is_running):
     subprocess.run(
-        [
-            "just",
-            "run",
-            "ingest-to-bronze",
-            "trips:nyc",
-            "2018-04",
-        ],
+        ["just", "run", "ingest-to-bronze", "trips:nyc", "2018-04"],
         check=True,
     )
+
 
 @pytest.fixture
 def bronze_jc_2019_06_again(bronze_jc_2019_06):
     subprocess.run(
-        [
-            "just",
-            "run",
-            "ingest-to-bronze",
-            "trips:jc",
-            "2019-06",
-        ],
+        ["just", "run", "ingest-to-bronze", "trips:jc", "2019-06"],
         check=True,
     )
+
 
 @pytest.fixture
 def bronze_jc_2021_02(stack_is_running):
     subprocess.run(
-        [
-            "just",
-            "run",
-            "ingest-to-bronze",
-            "trips:jc",
-            "2021-02",
-        ],
+        ["just", "run", "ingest-to-bronze", "trips:jc", "2021-02"],
         check=True,
     )
