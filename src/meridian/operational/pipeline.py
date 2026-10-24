@@ -1,4 +1,6 @@
+
 import argparse
+import json
 import os
 import time
 import urllib.parse
@@ -152,6 +154,8 @@ def run_pipeline(
     month = _next_due_month(job)
     if month is not None and is_published(market, month):
         _run_named_month(market, month)
+        return
+    print(json.dumps({"month": None, "work": "skipped"}))
 
 
 def parse_args(args=None) -> argparse.Namespace:

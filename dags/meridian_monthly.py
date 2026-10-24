@@ -21,7 +21,7 @@ def create_market_dag(market: str):
         dag_id=f"meridian_{market}_monthly",
         schedule=CronDataIntervalTimetable("0 0 1 * *", timezone="UTC",),
         start_date=start_date,
-        catchup=True,
+        catchup=False,
         max_active_runs=3,
         default_args={"retries": 2, "owner": "data-eng"},
         params={"month": ""},

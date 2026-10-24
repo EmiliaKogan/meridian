@@ -1,10 +1,5 @@
 import psycopg
 
-
-
-import psycopg
-
-
 def get_daily_station_trips(
     conn: psycopg.Connection, market: str, station_id: str, date_key: int
 ) -> tuple[int, int]:

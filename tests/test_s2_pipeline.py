@@ -1,3 +1,4 @@
+
 import pytest
 
 from meridian.operational.pipeline import (
@@ -64,9 +65,9 @@ def test_pipeline_runs_next_due_month(monkeypatch):
 
 
 def test_pipeline_does_nothing_when_no_month_is_due(
-    monkeypatch,
+    monkeypatch, capsys,
 ):
-    """A windowless run does nothing when no month is due."""
+    """A windowless run reports skipped when no month is due."""
     calls = _fake_named_run(monkeypatch)
     monkeypatch.setattr(
         "meridian.operational.pipeline._next_due_month",
@@ -76,12 +77,15 @@ def test_pipeline_does_nothing_when_no_month_is_due(
     run_pipeline(GOOD["market"])
 
     assert calls == []
+    assert capsys.readouterr().out.strip() == (
+        '{"month": null, "work": "skipped"}'
+    )
 
 
 def test_pipeline_does_nothing_when_month_is_unpublished(
-    monkeypatch,
+    monkeypatch, capsys,
 ):
-    """A windowless run does nothing for an unpublished month."""
+    """A windowless run reports skipped for unpublished data."""
     calls = _fake_named_run(monkeypatch)
     monkeypatch.setattr(
         "meridian.operational.pipeline._next_due_month",
@@ -95,6 +99,9 @@ def test_pipeline_does_nothing_when_month_is_unpublished(
     run_pipeline(GOOD["market"])
 
     assert calls == []
+    assert capsys.readouterr().out.strip() == (
+        '{"month": null, "work": "skipped"}'
+    )
 
 
 def test_pipeline_delegates_month_before_earliest(monkeypatch):

@@ -267,3 +267,14 @@ def test_month_is_not_complete_without_loads(conn):
         GOOD["market"],
         GOOD["month"],
     ) is False
+
+def test_gaps_when_earliest_is_incomplete(conn):
+    _complete_month(conn, "2021-02", 28)
+    _complete_month(conn, "2021-04", 30)
+
+    result = progress(conn, GOOD["job"])
+
+    assert result["watermark"] is None
+    assert result["complete"] == 2
+    assert result["gaps"] == ["2021-01", "2021-03"]
+    assert result["next"] == "2021-01"
