@@ -34,21 +34,19 @@ def migrated(pg_url: str) -> str:
 
 @pytest.fixture
 def conn(migrated: str):
-    """Connect to the isolated test database."""
-    with psycopg.connect(migrated) as connection:
+    """Provide a test connection and roll back its changes."""
+    connection = psycopg.connect(migrated)
+    try:
         yield connection
+    finally:
+        connection.rollback()
+        connection.close()
 
 
 @pytest.fixture(autouse=True)
 def clean_control_table(conn):
     conn.execute("DELETE FROM control_table")
-    conn.commit()
-
-
-@pytest.fixture
-def isolated_compose(monkeypatch):
-    """Use a separate Docker Compose project for infrastructure tests."""
-    monkeypatch.setenv("COMPOSE_PROJECT_NAME", "meridian_pytest")
+    #conn.commit()
 
 
 @pytest.fixture

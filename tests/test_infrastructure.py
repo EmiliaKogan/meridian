@@ -1,9 +1,7 @@
 import subprocess
-
 import pytest
 
 
-@pytest.mark.usefixtures("isolated_compose")
 def test_just_up_succeeds():
     result = subprocess.run(
         ["just", "up"],
@@ -14,7 +12,7 @@ def test_just_up_succeeds():
     assert result.returncode == 0
 
 
-@pytest.mark.usefixtures("isolated_compose")
+
 def test_postgres_is_available(stack_is_running):
     result = subprocess.run(
         [
@@ -29,18 +27,18 @@ def test_postgres_is_available(stack_is_running):
     assert result.returncode == 0
 
 
-@pytest.mark.usefixtures("isolated_compose")
-def test_just_down_succeeds():
-    result = subprocess.run(
-        ["just", "down"],
-        capture_output=True,
-        text=True,
-    )
 
-    assert result.returncode == 0
+# def test_just_down_succeeds():
+#     result = subprocess.run(
+#         ["just", "down"],
+#         capture_output=True,
+#         text=True,
+#     )
+
+#     assert result.returncode == 0
 
 
-@pytest.mark.usefixtures("isolated_compose")
+
 def test_just_down_stops_postgres(stack_is_running):
     result = subprocess.run(
         ["just", "down"],

@@ -160,7 +160,7 @@ def _find_gaps(
     completed: set[str],
     first_incomplete: str,
 ) -> list[str]:
-    if watermark is None or newest_complete is None:
+    if newest_complete is None:
         return []
 
     gaps = []
